@@ -208,6 +208,51 @@ Schema changes are applied automatically by GORM's `AutoMigrate` when the API re
 
 ---
 
+## 11. Automatic deploys with GitHub Actions (optional)
+
+`.github/workflows/deploy.yml` SSHes into the VPS on every push to `main` and runs `deploy.sh` — the same script you use manually. Set it up once:
+
+**a. Create a deploy key** (on your workstation or the VPS):
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/expense_deploy -N "" -C "github-actions-deploy"
+```
+
+Add the **public** key to the deploy user's `authorized_keys` on the VPS:
+
+```bash
+# run on the VPS, as the user GitHub will log in as
+cat >> ~/.ssh/authorized_keys < /path/to/expense_deploy.pub
+```
+
+**b. Give that user permission to run the deploy.** The SSH user must:
+- own `APP_PATH` (so `git pull` and the build write successfully), and
+- be able to run the two service commands without a password prompt.
+
+Add a sudoers rule (run `sudo visudo -f /etc/sudoers.d/expense-deploy`), replacing `deployuser`:
+
+```
+deployuser ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart expense-tracker, /usr/bin/systemctl reload httpd
+```
+
+> Simplest model: let this SSH user also **own the repo** and match the systemd `User=`. If you keep the service running as `expense`, either log in as `expense` (give it a shell + `authorized_keys`) or adjust `deploy.sh` to `sudo -u expense` the git/build steps.
+
+**c. Add the repo secrets** — GitHub → repo **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| ------ | ----- |
+| `SSH_HOST` | VPS IP or hostname |
+| `SSH_USER` | the deploy user (e.g. `deployuser`) |
+| `SSH_KEY` | contents of the **private** key `~/.ssh/expense_deploy` |
+| `APP_PATH` | `/var/www/expense-tracker` |
+| `SSH_PORT` | *(optional)* SSH port if not `22` |
+
+**d. Push to `main`.** The Actions tab shows the run; on success the VPS has pulled, rebuilt, and restarted. You can still run `./deploy.sh` by hand anytime, and trigger a deploy manually from **Actions → Deploy to VPS → Run workflow**.
+
+> First-connection note: `appleboy/ssh-action` accepts the host key automatically, so no `known_hosts` setup is needed.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause / fix |
