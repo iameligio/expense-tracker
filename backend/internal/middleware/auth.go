@@ -23,8 +23,15 @@ var writeError = func(w http.ResponseWriter, status int, msg string) {
 	w.Write([]byte(`{"error":"` + msg + `"}`))
 }
 
-// RequireAuth validates the Bearer access token and injects the user id/role.
-func RequireAuth(tm *auth.TokenManager) func(http.Handler) http.Handler {
+// AccountChecker reports whether an account is still allowed to authenticate.
+// UserRepository satisfies this interface.
+type AccountChecker interface {
+	IsActive(userID string) (bool, error)
+}
+
+// RequireAuth validates the Bearer access token, rejects suspended/banned
+// accounts, and injects the user id/role into the request context.
+func RequireAuth(tm *auth.TokenManager, accounts AccountChecker) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
@@ -36,6 +43,12 @@ func RequireAuth(tm *auth.TokenManager) func(http.Handler) http.Handler {
 			claims, err := tm.ParseAccessToken(token)
 			if err != nil {
 				writeError(w, http.StatusUnauthorized, "invalid or expired token")
+				return
+			}
+			// Enforce moderation status on every request so a suspend/ban takes
+			// effect immediately, not just when the access token expires.
+			if active, err := accounts.IsActive(claims.Subject); err != nil || !active {
+				writeError(w, http.StatusUnauthorized, "account is not active")
 				return
 			}
 			ctx := context.WithValue(r.Context(), ctxUserID, claims.Subject)

@@ -1,4 +1,5 @@
 export type Role = 'member' | 'admin'
+export type UserStatus = 'active' | 'suspended' | 'banned'
 export type CategoryType = 'fixed' | 'variable' | 'wants' | 'debts'
 export type SavingsTargetType = 'percent' | 'fixed'
 
@@ -6,6 +7,7 @@ export interface User {
   id: string
   email: string
   role: Role
+  status: UserStatus
   monthlyIncome: string
 }
 

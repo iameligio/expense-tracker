@@ -8,6 +8,7 @@ import type {
   Expense,
   SavingsTargetType,
   User,
+  UserStatus,
 } from '../types'
 
 export const authApi = {
@@ -54,6 +55,10 @@ export const dashboardApi = {
 
 export const adminApi = {
   listUsers: () => request<User[]>('/api/admin/users'),
+  setUserStatus: (id: string, status: UserStatus) =>
+    request<User>(`/api/admin/users/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteUser: (id: string) =>
+    request<{ status: string }>(`/api/admin/users/${id}`, { method: 'DELETE' }),
   getSettings: () => request<AppSetting>('/api/admin/settings'),
   updateSettings: (savingsTargetType: SavingsTargetType, savingsTargetValue: string) =>
     request<AppSetting>('/api/admin/settings', {

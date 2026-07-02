@@ -41,14 +41,27 @@ type authResponse struct {
 }
 
 type userPayload struct {
-	ID            string      `json:"id"`
-	Email         string      `json:"email"`
-	Role          models.Role `json:"role"`
-	MonthlyIncome string      `json:"monthlyIncome"`
+	ID            string            `json:"id"`
+	Email         string            `json:"email"`
+	Role          models.Role       `json:"role"`
+	Status        models.UserStatus `json:"status"`
+	MonthlyIncome string            `json:"monthlyIncome"`
 }
 
 func toUserPayload(u *models.User) userPayload {
-	return userPayload{ID: u.ID, Email: u.Email, Role: u.Role, MonthlyIncome: u.MonthlyIncome.String()}
+	return userPayload{ID: u.ID, Email: u.Email, Role: u.Role, Status: u.Status, MonthlyIncome: u.MonthlyIncome.String()}
+}
+
+// statusRejection returns a client-facing message if the account cannot log in.
+func statusRejection(status models.UserStatus) (string, bool) {
+	switch status {
+	case models.StatusSuspended:
+		return "Your account has been suspended. Please contact support.", true
+	case models.StatusBanned:
+		return "Your account has been banned.", true
+	default:
+		return "", false
+	}
 }
 
 // Register creates a member account (open self-registration). The account
@@ -106,6 +119,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	if msg, blocked := statusRejection(user.Status); blocked {
+		writeError(w, http.StatusForbidden, msg)
+		return
+	}
 
 	h.issueTokens(w, user, http.StatusOK)
 }
@@ -132,6 +149,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	user, err := h.users.FindByID(stored.UserID)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "account no longer exists")
+		return
+	}
+	if _, blocked := statusRejection(user.Status); blocked {
+		h.clearRefreshCookie(w)
+		writeError(w, http.StatusForbidden, "account is not active")
 		return
 	}
 

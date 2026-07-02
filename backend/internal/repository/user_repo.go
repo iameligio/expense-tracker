@@ -59,6 +59,55 @@ func (r *UserRepository) UpdateIncome(userID string, income interface{}) error {
 		Update("monthly_income", income).Error
 }
 
+// UpdateStatus sets a user's moderation status (active/suspended/banned).
+func (r *UserRepository) UpdateStatus(userID string, status models.UserStatus) error {
+	res := r.db.Model(&models.User{}).Where("id = ?", userID).
+		Update("status", status)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// IsActive reports whether the user exists and is in the active status.
+func (r *UserRepository) IsActive(userID string) (bool, error) {
+	var status models.UserStatus
+	err := r.db.Model(&models.User{}).Select("status").
+		Where("id = ?", userID).Scan(&status).Error
+	if err != nil {
+		return false, err
+	}
+	return status == models.StatusActive, nil
+}
+
+// Delete hard-deletes a user and all their data in a single transaction.
+// Expenses are removed first (their FK to categories is RESTRICT), then
+// refresh tokens and categories, then the user row itself.
+func (r *UserRepository) Delete(userID string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&models.Expense{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&models.RefreshToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&models.Category{}).Error; err != nil {
+			return err
+		}
+		res := tx.Where("id = ?", userID).Delete(&models.User{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
+}
+
 // List returns all users (admin use).
 func (r *UserRepository) List() ([]models.User, error) {
 	var users []models.User

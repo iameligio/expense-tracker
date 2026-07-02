@@ -20,6 +20,7 @@ A secure, multi-user monthly expense-tracking web app for **Philippine Peso (PHP
 - 🧾 Monthly expense CRUD with validation
 - 📊 Dashboard KPIs + pie chart (by category or by bucket), per selected month
 - ⚙️ Admin-configurable savings-target policy (percent of income or fixed ₱), applied to every member
+- 🛡️ Admin user moderation — **suspend**, **ban**, **reactivate**, or **delete** members (blocking takes effect immediately and revokes active sessions; admins can't lock out their own account)
 
 ## Project structure
 
@@ -137,6 +138,8 @@ cd backend && go test ./...      # budget/savings logic (percent + fixed targets
 | PATCH/DELETE | `/api/expenses/{id}` | ✔ | Edit / delete an expense |
 | GET | `/api/dashboard?month=YYYY-MM` | ✔ | KPIs + category/bucket breakdown |
 | GET | `/api/admin/users` | admin | List members |
+| PATCH | `/api/admin/users/{id}/status` | admin | Suspend / ban / reactivate a member |
+| DELETE | `/api/admin/users/{id}` | admin | Permanently delete a member + their data |
 | GET/PUT | `/api/admin/settings` | admin | Read / set savings-target policy |
 
 ## Security notes

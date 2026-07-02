@@ -1,10 +1,18 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { adminApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
 import { peso } from '../format'
-import { type AppSetting, type SavingsTargetType, type User } from '../types'
+import { type AppSetting, type SavingsTargetType, type User, type UserStatus } from '../types'
 import { ApiError } from '../api/client'
 
+const STATUS_PILL: Record<UserStatus, string> = {
+  active: 'pill-variable',
+  suspended: 'pill-wants',
+  banned: 'pill-debts',
+}
+
 export default function Admin() {
+  const { user: me } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [setting, setSetting] = useState<AppSetting | null>(null)
   const [error, setError] = useState('')
@@ -47,6 +55,32 @@ export default function Admin() {
     }
   }
 
+  async function changeStatus(u: User, next: UserStatus, verb: string) {
+    if (next !== 'active' && !confirm(`${verb} ${u.email}? This will end their active sessions.`)) return
+    setError('')
+    setStatus('')
+    try {
+      const updated = await adminApi.setUserStatus(u.id, next)
+      setUsers((list) => list.map((x) => (x.id === u.id ? updated : x)))
+      setStatus(`${u.email} is now ${next}.`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to update user status')
+    }
+  }
+
+  async function removeUser(u: User) {
+    if (!confirm(`Permanently delete ${u.email} and ALL their data? This cannot be undone.`)) return
+    setError('')
+    setStatus('')
+    try {
+      await adminApi.deleteUser(u.id)
+      setUsers((list) => list.filter((x) => x.id !== u.id))
+      setStatus(`${u.email} has been deleted.`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to delete user')
+    }
+  }
+
   if (loading) return <div className="page"><div className="spinner" /></div>
 
   return (
@@ -54,7 +88,7 @@ export default function Admin() {
       <div className="page-head">
         <div>
           <h1>Admin</h1>
-          <p className="muted">Manage the global savings-target policy and view members.</p>
+          <p className="muted">Manage members and the global savings-target policy.</p>
         </div>
       </div>
 
@@ -95,15 +129,38 @@ export default function Admin() {
       <div className="card">
         <div className="card-head"><h2>Members ({users.length})</h2></div>
         <table className="table">
-          <thead><tr><th>Email</th><th>Role</th><th className="right">Monthly income</th></tr></thead>
+          <thead>
+            <tr><th>Email</th><th>Role</th><th>Status</th><th className="right">Monthly income</th><th>Actions</th></tr>
+          </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.email}</td>
-                <td><span className={`pill ${u.role === 'admin' ? 'pill-debts' : 'pill-variable'}`}>{u.role}</span></td>
-                <td className="right">{peso(u.monthlyIncome)}</td>
-              </tr>
-            ))}
+            {users.map((u) => {
+              const isSelf = u.id === me?.id
+              return (
+                <tr key={u.id}>
+                  <td>{u.email}{isSelf && <span className="muted"> (you)</span>}</td>
+                  <td><span className={`pill ${u.role === 'admin' ? 'pill-debts' : 'pill-variable'}`}>{u.role}</span></td>
+                  <td><span className={`pill ${STATUS_PILL[u.status]}`}>{u.status}</span></td>
+                  <td className="right">{peso(u.monthlyIncome)}</td>
+                  <td className="nowrap">
+                    {isSelf ? (
+                      <span className="muted">—</span>
+                    ) : (
+                      <div className="action-row">
+                        {u.status === 'active' ? (
+                          <button className="btn btn-ghost btn-sm" onClick={() => changeStatus(u, 'suspended', 'Suspend')}>Suspend</button>
+                        ) : (
+                          <button className="btn btn-ghost btn-sm" onClick={() => changeStatus(u, 'active', 'Reactivate')}>Reactivate</button>
+                        )}
+                        {u.status !== 'banned' && (
+                          <button className="btn btn-danger btn-sm" onClick={() => changeStatus(u, 'banned', 'Ban')}>Ban</button>
+                        )}
+                        <button className="btn btn-danger btn-sm" onClick={() => removeUser(u)}>Delete</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

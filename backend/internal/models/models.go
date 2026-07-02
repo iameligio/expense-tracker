@@ -16,6 +16,24 @@ const (
 	RoleAdmin  Role = "admin"
 )
 
+// UserStatus is the moderation state of an account.
+type UserStatus string
+
+const (
+	StatusActive    UserStatus = "active"
+	StatusSuspended UserStatus = "suspended" // temporarily blocked; can be reactivated
+	StatusBanned    UserStatus = "banned"    // permanently blocked
+)
+
+// ValidUserStatus reports whether s is a recognized status.
+func ValidUserStatus(s UserStatus) bool {
+	switch s {
+	case StatusActive, StatusSuspended, StatusBanned:
+		return true
+	}
+	return false
+}
+
 // CategoryType groups categories into the four budgeting buckets.
 type CategoryType string
 
@@ -49,6 +67,7 @@ type User struct {
 	Email         string          `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
 	PasswordHash  string          `gorm:"type:varchar(255);not null" json:"-"`
 	Role          Role            `gorm:"type:varchar(16);not null;default:member" json:"role"`
+	Status        UserStatus      `gorm:"type:varchar(16);not null;default:active" json:"status"`
 	MonthlyIncome decimal.Decimal `gorm:"type:decimal(12,2);not null;default:0" json:"monthlyIncome"`
 	CreatedAt     time.Time       `json:"createdAt"`
 	UpdatedAt     time.Time       `json:"updatedAt"`
