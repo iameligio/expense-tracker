@@ -86,6 +86,9 @@ Then open **https://expense-tracker.test**. To remove later: `valet unproxy expe
 
 ## Production deployment (VPS)
 
+> **Full step-by-step guide for AlmaLinux 9 + Apache: [`DEPLOYMENT.md`](DEPLOYMENT.md).**
+> Ready-made configs are in `deploy/` (systemd unit, Apache vhost) and `deploy.sh` (pull → build → restart). Quick outline below.
+
 1. **Build the frontend** and serve the static files:
    ```bash
    cd frontend && npm ci && npm run build   # outputs dist/

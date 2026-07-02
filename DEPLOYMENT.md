@@ -1,0 +1,219 @@
+# Deploying to a VPS — AlmaLinux 9 + Apache
+
+This guide deploys the Expense Tracker on **AlmaLinux 9** with **Apache (httpd)** in front, the Go API kept alive by **systemd**, and updates via a manual **`git pull`**. Ready-made config files live in `deploy/` and `deploy.sh`.
+
+**Architecture on the server**
+
+```
+Browser ──HTTPS──▶ Apache (:443) ──┬──▶ static SPA files  (frontend/dist)
+                                   └──▶ /api  →  Go API (127.0.0.1:8080, systemd)
+                                                      │
+                                                      ▼
+                                                 MariaDB (127.0.0.1:3306)
+```
+
+Because the SPA and `/api` share one domain, the HttpOnly refresh cookie stays same-origin — no CORS or cookie changes needed.
+
+Run everything below as a sudo-capable user. Replace `expense-tracker.example.com` with your real domain everywhere.
+
+---
+
+## 1. Install prerequisites
+
+```bash
+sudo dnf update -y
+sudo dnf install -y git httpd mariadb-server mod_ssl
+
+# Go (toolchain — install the current release from go.dev to guarantee 1.24+)
+GO_VER=1.24.5
+curl -LO "https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz"
+sudo rm -rf /usr/local/go && sudo tar -C /usr/local -xzf "go${GO_VER}.linux-amd64.tar.gz"
+echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee /etc/profile.d/go.sh
+source /etc/profile.d/go.sh && go version
+
+# Node.js 20 (for building the frontend)
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+node --version
+```
+
+Enable the services:
+
+```bash
+sudo systemctl enable --now httpd mariadb
+```
+
+---
+
+## 2. Open the firewall
+
+```bash
+sudo firewall-cmd --permanent --add-service=http --add-service=https
+sudo firewall-cmd --reload
+```
+
+---
+
+## 3. Configure the database
+
+```bash
+sudo mysql_secure_installation   # set a root password, answer the prompts
+
+sudo mysql -u root -p <<'SQL'
+CREATE DATABASE IF NOT EXISTS expense_tracker CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'expense_app'@'localhost' IDENTIFIED BY 'REPLACE_WITH_STRONG_DB_PASSWORD';
+GRANT ALL PRIVILEGES ON expense_tracker.* TO 'expense_app'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+```
+
+Use a **dedicated, non-root** DB user (`expense_app` above) — not the MariaDB root account.
+
+---
+
+## 4. Get the code
+
+Create a service user and clone into `/var/www` (which already carries the correct SELinux context for Apache):
+
+```bash
+sudo useradd -r -m -d /var/www/expense-tracker -s /sbin/nologin expense || true
+sudo mkdir -p /var/www/expense-tracker
+sudo chown -R expense:expense /var/www/expense-tracker
+
+# Clone as the service user (use your repo URL)
+sudo -u expense git clone https://github.com/<you>/expense-tracker.git /var/www/expense-tracker
+```
+
+> If you push to a private repo, set up a deploy key or use HTTPS with a token so `sudo -u expense git pull` works non-interactively.
+
+---
+
+## 5. Configure production environment
+
+Create `backend/.env.production` from the template and fill in every `CHANGE_ME`:
+
+```bash
+cd /var/www/expense-tracker/backend
+sudo -u expense cp .env.example .env.production
+sudo -u expense nano .env.production
+```
+
+Set at least:
+
+```ini
+APP_ENV=production
+ENV=production
+PORT=8080
+CORS_ORIGINS=https://expense-tracker.example.com
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=expense_app
+DB_PASSWORD=REPLACE_WITH_STRONG_DB_PASSWORD
+DB_NAME=expense_tracker
+JWT_SECRET=PASTE_OUTPUT_OF_openssl_rand_base64_48
+ADMIN_EMAIL=etapiador@gmail.com
+COOKIE_SECURE=true
+```
+
+Generate a strong secret:
+
+```bash
+openssl rand -base64 48
+```
+
+`.env.production` is gitignored, so it lives only on the server.
+
+---
+
+## 6. Build
+
+```bash
+cd /var/www/expense-tracker
+
+# Backend binary (auto-migrates + seeds the DB on first run)
+sudo -u expense bash -lc 'cd backend && go build -o server ./cmd/server'
+
+# Frontend static bundle → frontend/dist
+sudo -u expense bash -lc 'cd frontend && npm ci && npm run build'
+```
+
+---
+
+## 7. Run the API under systemd
+
+```bash
+sudo cp deploy/expense-tracker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now expense-tracker
+
+# Verify
+sudo systemctl status expense-tracker --no-pager
+curl -fsS http://127.0.0.1:8080/health && echo
+```
+
+If it fails to start, check `sudo journalctl -u expense-tracker -e` (usually a wrong DB password or missing `.env.production`).
+
+---
+
+## 8. Configure Apache
+
+```bash
+sudo cp deploy/apache-expense-tracker.conf /etc/httpd/conf.d/expense-tracker.conf
+sudo sed -i 's/expense-tracker.example.com/YOUR_REAL_DOMAIN/' /etc/httpd/conf.d/expense-tracker.conf
+```
+
+**SELinux** — AlmaLinux blocks Apache from making network connections by default, so allow the proxy to reach the Go API:
+
+```bash
+sudo setsebool -P httpd_can_network_connect 1
+```
+
+Test the config and reload:
+
+```bash
+sudo apachectl configtest    # should print "Syntax OK"
+sudo systemctl reload httpd
+```
+
+Your site should now answer on `http://YOUR_REAL_DOMAIN`.
+
+---
+
+## 9. Enable HTTPS (Let's Encrypt)
+
+```bash
+sudo dnf install -y certbot python3-certbot-apache
+sudo certbot --apache -d expense-tracker.example.com
+```
+
+certbot adds the `:443` vhost, installs the certificate, and sets up an HTTP→HTTPS redirect. Auto-renewal is handled by the `certbot-renew.timer`. Since `COOKIE_SECURE=true`, the refresh cookie now works correctly over TLS.
+
+Open **https://expense-tracker.example.com**, register `etapiador@gmail.com` (auto-promoted to admin because it matches `ADMIN_EMAIL`), set your income, and start logging expenses.
+
+---
+
+## 10. Updating later (manual git pull)
+
+A helper script rebuilds and restarts everything:
+
+```bash
+cd /var/www/expense-tracker
+sudo -u expense git pull --ff-only          # or run the whole thing via deploy.sh
+sudo -u expense ./deploy.sh
+```
+
+`deploy.sh` runs: `git pull` → rebuild Go binary → `npm ci && npm run build` → `systemctl restart expense-tracker` → `systemctl reload httpd` → health check. (The service user needs sudo rights for those two systemctl calls, or run just the restart/reload steps as your sudo user.)
+
+Schema changes are applied automatically by GORM's `AutoMigrate` when the API restarts.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause / fix |
+| ------- | ------------------ |
+| 503 from Apache on `/api` | Go service down (`systemctl status expense-tracker`) or SELinux — run `setsebool -P httpd_can_network_connect 1` |
+| API won't start | Wrong DB creds or missing `.env.production` — `journalctl -u expense-tracker -e` |
+| SPA loads but refresh 404s | `FallbackResource /index.html` missing from the vhost `<Directory>` block |
+| Login works but you're logged out on reload | Cookie not `Secure`/not sent — confirm HTTPS is live and `COOKIE_SECURE=true` |
+| `git pull` prompts for credentials | Configure a deploy key or token for the `expense` user |

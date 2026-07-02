@@ -1,0 +1,24 @@
+[Unit]
+Description=Expense Tracker API (Go)
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User=expense
+Group=expense
+# WorkingDirectory must be the backend dir so the binary finds .env.production
+WorkingDirectory=/var/www/expense-tracker/backend
+Environment=APP_ENV=production
+ExecStart=/var/www/expense-tracker/backend/server
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
