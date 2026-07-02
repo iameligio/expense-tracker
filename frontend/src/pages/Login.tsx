@@ -35,10 +35,12 @@ export default function Login() {
         {error && <div className="alert alert-error">{error}</div>}
 
         <label>Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            required autoFocus autoComplete="email" inputMode="email" maxLength={255} />
         </label>
         <label>Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            required autoComplete="current-password" maxLength={72} />
         </label>
 
         <button className="btn btn-primary" type="submit" disabled={busy}>

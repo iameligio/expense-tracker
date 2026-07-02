@@ -18,6 +18,15 @@ export default function Register() {
       setError('Password must be at least 8 characters')
       return
     }
+    if (password.length > 72) {
+      setError('Password must be at most 72 characters')
+      return
+    }
+    const local = email.split('@')[0]?.toLowerCase() ?? ''
+    if (local.length >= 4 && password.toLowerCase().includes(local)) {
+      setError('Password must not contain your email name')
+      return
+    }
     setBusy(true)
     try {
       await register(email, password)
@@ -39,10 +48,12 @@ export default function Register() {
         {error && <div className="alert alert-error">{error}</div>}
 
         <label>Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            required autoFocus autoComplete="email" inputMode="email" maxLength={255} />
         </label>
         <label>Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} placeholder="At least 8 characters" />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            required minLength={8} maxLength={72} autoComplete="new-password" placeholder="At least 8 characters" />
         </label>
 
         <button className="btn btn-primary" type="submit" disabled={busy}>

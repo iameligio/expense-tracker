@@ -60,6 +60,12 @@ func (rl *RateLimiter) cleanupLoop() {
 	}
 }
 
+// Allow reports whether an event is permitted for an arbitrary key (e.g. an
+// email address), consuming one token. Used for per-account throttling.
+func (rl *RateLimiter) Allow(key string) bool {
+	return rl.get(key).Allow()
+}
+
 // Middleware limits requests keyed by client IP.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

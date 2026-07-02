@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"expense-tracker/backend/internal/auth"
+	appmw "expense-tracker/backend/internal/middleware"
 	"expense-tracker/backend/internal/models"
 	"expense-tracker/backend/internal/repository"
 	"expense-tracker/backend/internal/validation"
@@ -22,12 +23,23 @@ type AuthHandler struct {
 	tm           *auth.TokenManager
 	adminEmail   string
 	cookieSecure bool
+	loginLimiter *appmw.RateLimiter // per-email brute-force throttle
+	dummyHash    string             // for constant-time login on unknown users
 }
 
 // NewAuthHandler builds an AuthHandler.
 func NewAuthHandler(u *repository.UserRepository, c *repository.CategoryRepository, t *repository.TokenRepository, tm *auth.TokenManager, adminEmail string, cookieSecure bool) *AuthHandler {
-	return &AuthHandler{users: u, categories: c, tokens: t, tm: tm, adminEmail: adminEmail, cookieSecure: cookieSecure}
+	// Pre-compute a bcrypt hash so login spends the same time whether or not
+	// the account exists — closing a user-enumeration timing side channel.
+	dummy, _ := auth.HashPassword("timing-equalizer-not-a-real-password")
+	return &AuthHandler{
+		users: u, categories: c, tokens: t, tm: tm,
+		adminEmail: adminEmail, cookieSecure: cookieSecure, dummyHash: dummy,
+	}
 }
+
+// SetLoginLimiter attaches the per-email login throttle.
+func (h *AuthHandler) SetLoginLimiter(l *appmw.RateLimiter) { h.loginLimiter = l }
 
 type credentials struct {
 	Email    string `json:"email" validate:"required,email"`
@@ -52,6 +64,41 @@ func toUserPayload(u *models.User) userPayload {
 	return userPayload{ID: u.ID, Email: u.Email, Role: u.Role, Status: u.Status, MonthlyIncome: u.MonthlyIncome.String()}
 }
 
+// commonPasswords is a small blocklist of the most-guessed passwords. NIST
+// SP 800-63B recommends screening against known-common values rather than
+// imposing composition rules.
+var commonPasswords = map[string]bool{
+	"password": true, "password1": true, "password123": true, "12345678": true,
+	"123456789": true, "1234567890": true, "qwerty123": true, "qwertyui": true,
+	"11111111": true, "12341234": true, "letmein1": true, "iloveyou": true,
+	"admin123": true, "welcome1": true, "abc12345": true, "87654321": true,
+	"changeme": true, "passw0rd": true,
+}
+
+// passwordPolicyError validates a password at registration. Returns (msg, ok);
+// ok=false means rejected with the given user-facing message.
+func passwordPolicyError(email, password string) (string, bool) {
+	if len(password) < 8 {
+		return "password must be at least 8 characters", false
+	}
+	if len(password) > 72 {
+		return "password must be at most 72 characters", false
+	}
+	lower := strings.ToLower(password)
+	if commonPasswords[lower] {
+		return "that password is too common — please choose a stronger one", false
+	}
+	// Password must not embed the email's local part (e.g. "juan" in juan@x.com).
+	local := strings.ToLower(strings.TrimSpace(email))
+	if i := strings.Index(local, "@"); i > 0 {
+		local = local[:i]
+	}
+	if len(local) >= 4 && strings.Contains(lower, local) {
+		return "password must not contain your email name", false
+	}
+	return "", true
+}
+
 // statusRejection returns a client-facing message if the account cannot log in.
 func statusRejection(status models.UserStatus) (string, bool) {
 	switch status {
@@ -74,6 +121,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := validation.Struct(body); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if msg, ok := passwordPolicyError(body.Email, body.Password); !ok {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -113,9 +164,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.users.FindByEmail(body.Email)
-	if err != nil || !auth.CheckPassword(user.PasswordHash, body.Password) {
-		// Generic message — no user enumeration.
+	email := strings.ToLower(strings.TrimSpace(body.Email))
+
+	// Per-account throttle: slows credential-stuffing against one account even
+	// from many IPs (the IP-based limiter covers the other direction).
+	if h.loginLimiter != nil && email != "" && !h.loginLimiter.Allow(email) {
+		writeError(w, http.StatusTooManyRequests, "too many login attempts, please wait a minute")
+		return
+	}
+
+	user, err := h.users.FindByEmail(email)
+	if err != nil {
+		// Spend the same time as a real bcrypt compare so response timing does
+		// not reveal whether the account exists.
+		auth.CheckPassword(h.dummyHash, body.Password)
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	if !auth.CheckPassword(user.PasswordHash, body.Password) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}

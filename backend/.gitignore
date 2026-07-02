@@ -6,5 +6,6 @@
 
 *.log
 /tmp/
-server
+# Built binary only (anchored so it doesn't match the cmd/server/ source dir)
+/server
 bin/

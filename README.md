@@ -144,8 +144,10 @@ cd backend && go test ./...      # budget/savings logic (percent + fixed targets
 
 ## Security notes
 
-- Passwords hashed with bcrypt (cost 12); hashes never leave the server.
-- Short-lived JWT access token (in memory on the client) + long-lived refresh token stored **hashed** server-side in an HttpOnly, `SameSite=Strict` cookie, rotated on every refresh and revocable on logout.
-- All member queries are ownership-scoped in the repository layer; admin routes gated by `RequireAdmin`.
-- Auth endpoints are rate-limited per IP; generic error messages avoid user enumeration.
-- Baseline security headers on every response; `ENV=production` / `COOKIE_SECURE=true` enable `Secure` cookies and HSTS (serve behind TLS).
+- **Passwords:** bcrypt (cost 12); hashes never leave the server. Registration enforces a policy — length 8–72, no common/breached passwords, and no email-name embedded in the password.
+- **Tokens:** short-lived JWT access token (in memory on the client) + long-lived refresh token stored **hashed** server-side in an HttpOnly, `SameSite=Strict` cookie, rotated on every refresh and revocable on logout / suspend / ban. JWTs are verified against HMAC only (no algorithm-confusion). A weak `JWT_SECRET` (<32 chars) is rejected in production.
+- **Authorization:** all member queries are ownership-scoped in the repository layer; admin routes gated by `RequireAdmin`; suspended/banned accounts are rejected on every request.
+- **Rate limiting (layered, per client IP):** a broad global limiter on all `/api` routes, a tighter limiter on `/auth/*`, and a **per-email** brute-force throttle on login.
+- **Anti-enumeration:** login returns an identical generic error and runs a constant-time bcrypt comparison whether or not the account exists.
+- **Headers & transport:** every API response carries `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy`; the Apache vhost sets a strict SPA CSP + HSTS. `ENV=production` / `COOKIE_SECURE=true` enable `Secure` cookies and HSTS (serve behind TLS).
+- **Hardening:** request body capped at 1 MB with unknown-field rejection; server has read/write/idle/header timeouts (Slowloris mitigation) and a header-size cap.

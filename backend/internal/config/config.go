@@ -43,12 +43,16 @@ func Load() (*Config, error) {
 	accessMin := getIntEnv("ACCESS_TOKEN_TTL_MINUTES", 15)
 	refreshHrs := getIntEnv("REFRESH_TOKEN_TTL_HOURS", 168)
 
+	isProd := strings.EqualFold(getEnv("ENV", "development"), "production")
+
 	secret := getEnv("JWT_SECRET", "")
 	if secret == "" {
 		return nil, fmt.Errorf("JWT_SECRET must be set")
 	}
-
-	isProd := strings.EqualFold(getEnv("ENV", "development"), "production")
+	// A short secret is trivially brute-forceable. Require real entropy in prod.
+	if isProd && len(secret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters in production (use: openssl rand -base64 48)")
+	}
 
 	cfg := &Config{
 		Port:            getEnv("PORT", "8080"),

@@ -36,6 +36,10 @@ func SecureHeaders(isProduction bool) func(http.Handler) http.Handler {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			w.Header().Set("X-Frame-Options", "DENY")
 			w.Header().Set("Referrer-Policy", "no-referrer")
+			// This API only ever returns JSON — lock the CSP all the way down.
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+			w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+			w.Header().Set("Cross-Origin-Resource-Policy", "same-site")
 			if isProduction {
 				w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
