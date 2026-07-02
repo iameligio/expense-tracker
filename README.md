@@ -65,7 +65,7 @@ Serve the app at **https://expense-tracker.test** by proxying the domain to the 
 
 ```bash
 # 1. Database
-mysql -uroot -pyour_db_password -e "CREATE DATABASE IF NOT EXISTS expense_tracker"
+mysql -uroot -p -e "CREATE DATABASE IF NOT EXISTS expense_tracker"   # prompts for your DB password
 
 # 2. Backend (auto-migrates + seeds, serves :8080)
 cd backend
