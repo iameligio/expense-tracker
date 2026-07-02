@@ -1,0 +1,10 @@
+# Env files hold secrets — never commit them. Only .env.example is tracked.
+.env
+.env.local
+.env.production
+.env.*.local
+
+*.log
+/tmp/
+server
+bin/

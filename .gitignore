@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Backend env files hold secrets — never commit them (only .env.example is tracked)
+backend/.env
+backend/.env.local
+backend/.env.production
+
+# Any *.local override (frontend Vite convention) and machine-local env
+*.local
+.env
+
+# Build output
+frontend/dist/
+backend/server
+backend/bin/
+
+# Logs & OS cruft
+*.log
+.DS_Store
+
+# Tooling artifacts
+.playwright-mcp/
