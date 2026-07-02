@@ -21,7 +21,7 @@ export default function Register() {
     setBusy(true)
     try {
       await register(email, password)
-      navigate('/')
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong')
     } finally {

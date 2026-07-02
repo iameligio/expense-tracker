@@ -18,7 +18,7 @@ export default function Layout() {
           <span>Expense Tracker</span>
         </div>
         <nav className="nav">
-          <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/expenses">Expenses</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
