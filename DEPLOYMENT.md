@@ -137,6 +137,8 @@ sudo -u expense bash -lc 'cd backend && go build -o server ./cmd/server'
 sudo -u expense bash -lc 'cd frontend && npm ci && npm run build'
 ```
 
+The frontend is a **Progressive Web App**: `npm run build` also emits a service worker (`sw.js`, `workbox-*.js`), a `manifest.webmanifest`, and `registerSW.js` into `frontend/dist`. These are plain static files served straight from `DocumentRoot` by Apache — no extra build or config step. The app icons in `frontend/public/` are committed to the repo, so no icon-generation step runs on the server (`npm run generate-pwa-assets` is a local-only dev helper).
+
 ---
 
 ## 7. Run the API under systemd
@@ -176,6 +178,8 @@ sudo systemctl reload httpd
 ```
 
 Your site should now answer on `http://YOUR_REAL_DOMAIN`.
+
+> **PWA caching note.** This vhost sets no `Expires`/`Cache-Control` headers, so the service worker (`sw.js`) and `index.html` are revalidated normally and PWA updates propagate on the next visit — nothing to configure. If you later add far-future caching for the hashed, immutable bundles in `/assets/*`, **exclude `sw.js`, `registerSW.js`, `index.html`, and `manifest.webmanifest`** from it, or clients will get stuck on a stale app shell.
 
 ---
 
@@ -262,3 +266,5 @@ deployuser ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart expense-tracker, /usr/
 | SPA loads but refresh 404s | `FallbackResource /index.html` missing from the vhost `<Directory>` block |
 | Login works but you're logged out on reload | Cookie not `Secure`/not sent — confirm HTTPS is live and `COOKIE_SECURE=true` |
 | `git pull` prompts for credentials | Configure a deploy key or token for the `expense` user |
+| App shows an old version after a deploy | Service worker serves the cached shell until it updates — it refreshes on the next visit/reload (`registerType: autoUpdate`). Force it via the browser's **Application → Service Workers → Update/Unregister**. Don't add long-lived cache headers to `sw.js`/`index.html` (see the PWA caching note in §8). |
+| "Install app" option missing in the browser | PWA install needs HTTPS (finish §9) — it won't appear over plain `http://`. |
