@@ -6,7 +6,10 @@ import type {
   CategoryType,
   Dashboard,
   Expense,
+  Income,
+  IncomeSource,
   SavingsTargetType,
+  Trend,
   User,
   UserStatus,
 } from '../types'
@@ -49,8 +52,27 @@ export const expenseApi = {
   remove: (id: string) => request<{ status: string }>(`/api/expenses/${id}`, { method: 'DELETE' }),
 }
 
+export interface IncomeInput {
+  amount: string
+  note: string | null
+  receivedOn: string
+  source: IncomeSource
+}
+
+export const incomeApi = {
+  list: (month: string) => request<Income[]>(`/api/incomes?month=${month}`),
+  create: (input: IncomeInput) => request<Income>('/api/incomes', { method: 'POST', body: input }),
+  update: (id: string, input: IncomeInput) =>
+    request<Income>(`/api/incomes/${id}`, { method: 'PATCH', body: input }),
+  remove: (id: string) => request<{ status: string }>(`/api/incomes/${id}`, { method: 'DELETE' }),
+}
+
 export const dashboardApi = {
   get: (month: string) => request<Dashboard>(`/api/dashboard?month=${month}`),
+}
+
+export const trendsApi = {
+  get: (from: string, to: string) => request<Trend>(`/api/trends?from=${from}&to=${to}`),
 }
 
 export const adminApi = {

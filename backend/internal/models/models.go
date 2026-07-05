@@ -53,6 +53,24 @@ func ValidCategoryType(t CategoryType) bool {
 	return false
 }
 
+// IncomeSource groups income entries by where the money came from.
+type IncomeSource string
+
+const (
+	IncomeSalary      IncomeSource = "salary"
+	IncomeSideProject IncomeSource = "side_project"
+	IncomeOther       IncomeSource = "other"
+)
+
+// ValidIncomeSource reports whether s is one of the allowed income sources.
+func ValidIncomeSource(s IncomeSource) bool {
+	switch s {
+	case IncomeSalary, IncomeSideProject, IncomeOther:
+		return true
+	}
+	return false
+}
+
 // SavingsTargetType selects how the global savings target is interpreted.
 type SavingsTargetType string
 
@@ -74,6 +92,7 @@ type User struct {
 
 	Categories []Category `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	Expenses   []Expense  `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	Incomes    []Income   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 }
 
 // Category is a user-owned spending category tied to one of the four buckets.
@@ -94,6 +113,18 @@ type Expense struct {
 	UserID     string          `gorm:"type:char(36);not null;index:idx_user_spent,priority:1" json:"userId"`
 	CategoryID string          `gorm:"type:char(36);not null;index" json:"categoryId"`
 	Category   *Category       `gorm:"constraint:OnDelete:RESTRICT" json:"category,omitempty"`
+	CreatedAt  time.Time       `json:"createdAt"`
+	UpdatedAt  time.Time       `json:"updatedAt"`
+}
+
+// Income is a single logged earning, owned by a user and tagged with a source.
+type Income struct {
+	ID         string          `gorm:"type:char(36);primaryKey" json:"id"`
+	Amount     decimal.Decimal `gorm:"type:decimal(12,2);not null" json:"amount"`
+	Note       *string         `gorm:"type:text" json:"note"`
+	ReceivedOn time.Time       `gorm:"type:date;not null;index:idx_user_received,priority:2" json:"receivedOn"`
+	Source     IncomeSource    `gorm:"type:varchar(16);not null" json:"source"`
+	UserID     string          `gorm:"type:char(36);not null;index:idx_user_received,priority:1" json:"userId"`
 	CreatedAt  time.Time       `json:"createdAt"`
 	UpdatedAt  time.Time       `json:"updatedAt"`
 }
@@ -138,6 +169,13 @@ func (c *Category) BeforeCreate(tx *gorm.DB) error {
 func (e *Expense) BeforeCreate(tx *gorm.DB) error {
 	if e.ID == "" {
 		e.ID = uuid.NewString()
+	}
+	return nil
+}
+
+func (i *Income) BeforeCreate(tx *gorm.DB) error {
+	if i.ID == "" {
+		i.ID = uuid.NewString()
 	}
 	return nil
 }

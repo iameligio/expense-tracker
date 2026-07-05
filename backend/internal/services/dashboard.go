@@ -13,12 +13,13 @@ import (
 type DashboardService struct {
 	users    *repository.UserRepository
 	expenses *repository.ExpenseRepository
+	incomes  *repository.IncomeRepository
 	settings *repository.SettingRepository
 }
 
 // NewDashboardService builds a DashboardService.
-func NewDashboardService(u *repository.UserRepository, e *repository.ExpenseRepository, s *repository.SettingRepository) *DashboardService {
-	return &DashboardService{users: u, expenses: e, settings: s}
+func NewDashboardService(u *repository.UserRepository, e *repository.ExpenseRepository, i *repository.IncomeRepository, s *repository.SettingRepository) *DashboardService {
+	return &DashboardService{users: u, expenses: e, incomes: i, settings: s}
 }
 
 // CategorySlice is one pie-chart segment.
@@ -35,20 +36,23 @@ type TypeSlice struct {
 	Total decimal.Decimal     `json:"total"`
 }
 
+// IncomeSlice aggregates income by source.
+type IncomeSlice struct {
+	Source models.IncomeSource `json:"source"`
+	Total  decimal.Decimal     `json:"total"`
+}
+
 // Dashboard is the full response for GET /api/dashboard.
 type Dashboard struct {
 	Month             string          `json:"month"`
 	Summary           BudgetSummary   `json:"summary"`
 	CategoryBreakdown []CategorySlice `json:"categoryBreakdown"`
 	TypeBreakdown     []TypeSlice     `json:"typeBreakdown"`
+	IncomeBreakdown   []IncomeSlice   `json:"incomeBreakdown"`
 }
 
 // Build computes the dashboard for a user and month range [from, to).
 func (s *DashboardService) Build(userID, month string, from, to time.Time) (*Dashboard, error) {
-	user, err := s.users.FindByID(userID)
-	if err != nil {
-		return nil, err
-	}
 	setting, err := s.settings.Get()
 	if err != nil {
 		return nil, err
@@ -57,7 +61,15 @@ func (s *DashboardService) Build(userID, month string, from, to time.Time) (*Das
 	if err != nil {
 		return nil, err
 	}
+	income, err := s.incomes.TotalForUserMonth(userID, from, to)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.expenses.CategoryBreakdown(userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	incomeRows, err := s.incomes.SourceBreakdown(userID, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -78,10 +90,16 @@ func (s *DashboardService) Build(userID, month string, from, to time.Time) (*Das
 		}
 	}
 
+	incomeSlices := make([]IncomeSlice, 0, len(incomeRows))
+	for _, r := range incomeRows {
+		incomeSlices = append(incomeSlices, IncomeSlice{Source: r.Source, Total: r.Total})
+	}
+
 	return &Dashboard{
 		Month:             month,
-		Summary:           ComputeBudget(user.MonthlyIncome, total, setting),
+		Summary:           ComputeBudget(income, total, setting),
 		CategoryBreakdown: catSlices,
 		TypeBreakdown:     typeSlices,
+		IncomeBreakdown:   incomeSlices,
 	}, nil
 }

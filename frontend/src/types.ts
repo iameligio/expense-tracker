@@ -1,6 +1,7 @@
 export type Role = 'member' | 'admin'
 export type UserStatus = 'active' | 'suspended' | 'banned'
 export type CategoryType = 'fixed' | 'variable' | 'wants' | 'debts'
+export type IncomeSource = 'salary' | 'side_project' | 'other'
 export type SavingsTargetType = 'percent' | 'fixed'
 
 export interface User {
@@ -37,6 +38,17 @@ export interface Expense {
   updatedAt: string
 }
 
+export interface Income {
+  id: string
+  amount: string
+  note: string | null
+  receivedOn: string
+  source: IncomeSource
+  userId: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface BudgetSummary {
   income: string
   totalExpenses: string
@@ -58,11 +70,30 @@ export interface TypeSlice {
   total: string
 }
 
+export interface IncomeSlice {
+  source: IncomeSource
+  total: string
+}
+
 export interface Dashboard {
   month: string
   summary: BudgetSummary
   categoryBreakdown: CategorySlice[]
   typeBreakdown: TypeSlice[]
+  incomeBreakdown: IncomeSlice[]
+}
+
+export interface TrendPoint {
+  month: string
+  income: string
+  expenses: string
+  net: string
+}
+
+export interface Trend {
+  from: string
+  to: string
+  months: TrendPoint[]
 }
 
 export interface AppSetting {
@@ -80,4 +111,12 @@ export const TYPE_LABELS: Record<CategoryType, string> = {
   variable: 'Variable',
   wants: 'Wants',
   debts: 'Debts',
+}
+
+export const INCOME_SOURCES: IncomeSource[] = ['salary', 'side_project', 'other']
+
+export const SOURCE_LABELS: Record<IncomeSource, string> = {
+  salary: 'Salary',
+  side_project: 'Side Project',
+  other: 'Other',
 }

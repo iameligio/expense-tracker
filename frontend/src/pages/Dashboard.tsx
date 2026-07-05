@@ -1,21 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { dashboardApi, meApi } from '../api/endpoints'
-import { useAuth } from '../auth/AuthContext'
+import { Link } from 'react-router-dom'
+import { dashboardApi } from '../api/endpoints'
 import PieChart, { type PieDatum } from '../components/PieChart'
 import { currentMonth, monthLabel, peso } from '../format'
-import { TYPE_LABELS, type Dashboard as DashboardData } from '../types'
+import { SOURCE_LABELS, TYPE_LABELS, type Dashboard as DashboardData } from '../types'
 import { ApiError } from '../api/client'
 
 export default function Dashboard() {
-  const { user, refreshUser } = useAuth()
   const [month, setMonth] = useState(currentMonth())
   const [data, setData] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [chartMode, setChartMode] = useState<'category' | 'type'>('category')
-
-  const [editingIncome, setEditingIncome] = useState(false)
-  const [incomeInput, setIncomeInput] = useState('')
+  const [chartMode, setChartMode] = useState<'category' | 'type' | 'income'>('category')
 
   async function load() {
     setLoading(true)
@@ -34,21 +30,13 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
 
-  async function saveIncome() {
-    try {
-      await meApi.setIncome(incomeInput || '0')
-      await refreshUser()
-      setEditingIncome(false)
-      load()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to update income')
-    }
-  }
-
   const pieData: PieDatum[] = useMemo(() => {
     if (!data) return []
     if (chartMode === 'type') {
       return data.typeBreakdown.map((t) => ({ label: TYPE_LABELS[t.type], value: parseFloat(t.total) }))
+    }
+    if (chartMode === 'income') {
+      return data.incomeBreakdown.map((i) => ({ label: SOURCE_LABELS[i.source], value: parseFloat(i.total) }))
     }
     return data.categoryBreakdown.map((c) => ({ label: c.name, value: parseFloat(c.total) }))
   }, [data, chartMode])
@@ -73,34 +61,21 @@ export default function Dashboard() {
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="income-bar">
-        <span>Monthly income</span>
-        {editingIncome ? (
-          <div className="income-edit">
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={incomeInput}
-              onChange={(e) => setIncomeInput(e.target.value)}
-              autoFocus
-            />
-            <button className="btn btn-primary btn-sm" onClick={saveIncome}>Save</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditingIncome(false)}>Cancel</button>
-          </div>
-        ) : (
-          <div className="income-display">
-            <strong>{peso(user?.monthlyIncome ?? '0')}</strong>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setIncomeInput(user?.monthlyIncome ?? '')
-                setEditingIncome(true)
-              }}
-            >
-              Edit
-            </button>
-          </div>
-        )}
+        <span>Income this month</span>
+        <div className="income-display">
+          {data && data.incomeBreakdown.length > 0 ? (
+            <div className="income-sources">
+              {data.incomeBreakdown.map((i) => (
+                <span key={i.source} className={`pill pill-${i.source}`}>
+                  {SOURCE_LABELS[i.source]} · {peso(i.total)}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="muted">No income logged yet</span>
+          )}
+          <Link className="btn btn-ghost btn-sm" to="/income">Manage income →</Link>
+        </div>
       </div>
 
       {loading ? (
@@ -143,6 +118,12 @@ export default function Dashboard() {
                   onClick={() => setChartMode('type')}
                 >
                   By bucket
+                </button>
+                <button
+                  className={chartMode === 'income' ? 'active' : ''}
+                  onClick={() => setChartMode('income')}
+                >
+                  Income
                 </button>
               </div>
             </div>

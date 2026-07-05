@@ -35,6 +35,7 @@ func Migrate(gdb *gorm.DB) error {
 		&models.User{},
 		&models.Category{},
 		&models.Expense{},
+		&models.Income{},
 		&models.AppSetting{},
 		&models.RefreshToken{},
 	); err != nil {

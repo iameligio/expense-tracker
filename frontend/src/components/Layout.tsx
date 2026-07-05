@@ -19,7 +19,9 @@ export default function Layout() {
         </div>
         <nav className="nav">
           <NavLink to="/dashboard">Dashboard</NavLink>
+          <NavLink to="/income">Income</NavLink>
           <NavLink to="/expenses">Expenses</NavLink>
+          <NavLink to="/trends">Trends</NavLink>
           <NavLink to="/categories">Categories</NavLink>
           {user?.role === 'admin' && <NavLink to="/admin">Admin</NavLink>}
         </nav>

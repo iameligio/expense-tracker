@@ -7,6 +7,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Expenses from './pages/Expenses'
+import Income from './pages/Income'
+import Trends from './pages/Trends'
 import Categories from './pages/Categories'
 import Admin from './pages/Admin'
 
@@ -23,6 +25,8 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/expenses" element={<Expenses />} />
+              <Route path="/income" element={<Income />} />
+              <Route path="/trends" element={<Trends />} />
               <Route path="/categories" element={<Categories />} />
             </Route>
           </Route>

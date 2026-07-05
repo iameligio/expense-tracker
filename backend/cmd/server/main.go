@@ -38,19 +38,22 @@ func main() {
 	userRepo := repository.NewUserRepository(gdb)
 	catRepo := repository.NewCategoryRepository(gdb)
 	expRepo := repository.NewExpenseRepository(gdb)
+	incRepo := repository.NewIncomeRepository(gdb)
 	setRepo := repository.NewSettingRepository(gdb)
 	tokRepo := repository.NewTokenRepository(gdb)
 
 	// Services / auth
 	tm := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
-	dashSvc := services.NewDashboardService(userRepo, expRepo, setRepo)
+	dashSvc := services.NewDashboardService(userRepo, expRepo, incRepo, setRepo)
 
 	// Handlers
 	authH := handlers.NewAuthHandler(userRepo, catRepo, tokRepo, tm, cfg.AdminEmail, cfg.CookieSecure)
 	meH := handlers.NewMeHandler(userRepo)
 	catH := handlers.NewCategoryHandler(catRepo)
 	expH := handlers.NewExpenseHandler(expRepo, catRepo)
+	incH := handlers.NewIncomeHandler(incRepo)
 	dashH := handlers.NewDashboardHandler(dashSvc)
+	trendsH := handlers.NewTrendsHandler(dashSvc)
 	// Rate limiters (per client IP):
 	//  - global: broad DoS/abuse guard across the whole API
 	//  - auth:   tighter budget for unauthenticated /auth/* endpoints
@@ -105,7 +108,13 @@ func main() {
 			priv.Patch("/expenses/{id}", expH.Update)
 			priv.Delete("/expenses/{id}", expH.Delete)
 
+			priv.Get("/incomes", incH.List)
+			priv.Post("/incomes", incH.Create)
+			priv.Patch("/incomes/{id}", incH.Update)
+			priv.Delete("/incomes/{id}", incH.Delete)
+
 			priv.Get("/dashboard", dashH.Get)
+			priv.Get("/trends", trendsH.Get)
 
 			// Admin-only.
 			priv.Group(func(adm chi.Router) {
